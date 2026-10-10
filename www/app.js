@@ -29,7 +29,9 @@ const S = {
   tags: store.get('tags', ''),
   pid: 0,
   posts: [],
-  seen: new Set(),
+  loaded: new Set(),
+  skipped: 0,
+  emptyRuns: 0,
   loading: false,
   end: false,
   muted: true,
@@ -42,9 +44,39 @@ const S = {
 };
 let likedIds = new Set(S.likes.map((p) => p.id));
 const typeCache = new Map();
+const SEEN_MAX = 50000;
+let seenList = store.get('seen', []);
+if (!Array.isArray(seenList)) seenList = [];
+const seenSet = new Set(seenList);
+let seenSaveT = 0, seenT = 0;
+// iOS'un eski sürümleri WebM oynatamaz; desteklemiyorsa bu gönderileri baştan ele
+const CAN_WEBM = (() => {
+  try { const v = document.createElement('video'); return !!(v.canPlayType && v.canPlayType('video/webm')); } catch (e) { return true; }
+})();
 
 const feed = $('#feed');
 const https = (u) => String(u || '').replace(/^http:\/\//i, 'https://');
+
+/* ---------- görülenler (kalıcı) ---------- */
+function saveSeen() {
+  clearTimeout(seenSaveT);
+  seenSaveT = 0;
+  store.set('seen', seenList);
+}
+function markSeen(id) {
+  if (seenSet.has(id)) return;
+  seenSet.add(id);
+  seenList.push(id);
+  if (seenList.length > SEEN_MAX) seenList.splice(0, 5000).forEach((x) => seenSet.delete(x));
+  if (!seenSaveT) seenSaveT = setTimeout(saveSeen, 1500);
+}
+function resetSeen() {
+  seenList = [];
+  seenSet.clear();
+  saveSeen();
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveSeen(); });
+window.addEventListener('pagehide', saveSeen);
 
 /* ---------- yardımcılar ---------- */
 let toastT;
@@ -103,6 +135,7 @@ function norm(p) {
   if (!file || !p.id) return null;
   const ext = (file.split('?')[0].split('.').pop() || '').toLowerCase();
   const video = ['mp4', 'webm', 'mov', 'm4v'].indexOf(ext) !== -1;
+  if (ext === 'webm' && !CAN_WEBM) return null;
   const tags = String(p.tags || '').trim().split(/\s+/).filter(Boolean);
   if (tags.some(isBlocked)) return null;
   const sample = https(p.sample_url);
@@ -166,17 +199,26 @@ async function loadMore() {
     const fresh = [];
     for (const r of raw) {
       const p = norm(r);
-      if (p && !S.seen.has(p.id)) { S.seen.add(p.id); fresh.push(p); }
+      if (!p || S.loaded.has(p.id)) continue;
+      if (seenSet.has(p.id)) { S.skipped++; continue; }
+      S.loaded.add(p.id);
+      fresh.push(p);
     }
     if (fresh.length) {
+      S.emptyRuns = 0;
       hideMsg();
       addSlides(fresh);
     } else if (!S.end) {
-      again = true;
+      S.emptyRuns++;
+      if (S.emptyRuns >= 25) S.end = true; else again = true;
     }
     if (!S.posts.length && S.end) {
-      showMsg(S.tags ? 'Bu etiketlerle sonuç bulunamadı. Etiket adı yanlış yazılmış olabilir.' : 'Sonuç bulunamadı.', 'Etiket ara', openSheet);
-      if (S.tags) didYouMean(gen);
+      if (S.skipped > 0) {
+        showMsg('Bu etiketlerde görmediğin içerik kalmadı.', 'Görülenleri sıfırla', () => { resetSeen(); resetFeed(); });
+      } else {
+        showMsg(S.tags ? 'Bu etiketlerle sonuç bulunamadı. Etiket adı yanlış yazılmış olabilir.' : 'Sonuç bulunamadı.', 'Etiket ara', openSheet);
+        if (S.tags) didYouMean(gen);
+      }
     }
   } catch (e) {
     if (gen !== S.gen) return;
@@ -377,7 +419,7 @@ function updateVC(slide, v) {
 }
 
 function mount(slide) {
-  if (slide.dataset.m) return;
+  if (slide.dataset.m || slide.dataset.bad) return;
   const p = S.posts[Number(slide.dataset.i)];
   if (!p) return;
   let m;
@@ -406,13 +448,23 @@ function mount(slide) {
     if (!slide.contains(m)) return;
     m.remove();
     delete slide.dataset.m;
-    if (!slide.querySelector('.fail')) {
-      let host = '?';
-      try { host = new URL(p.src).hostname; } catch (er) { /* yoksay */ }
-      const f = document.createElement('div');
-      f.className = 'fail';
-      f.textContent = 'Medya yüklenemedi (' + host + '). VPN açık mı? Format sorunuysa sağdaki ↗ ile orijinale git.';
-      slide.insertBefore(f, slide.firstChild);
+    slide.dataset.bad = '1';
+    if (S.view === 'feed') markSeen(p.id); // oynamayan içerik bir daha gelmesin
+    let host = '?';
+    try { host = new URL(p.src).hostname; } catch (er) { /* yoksay */ }
+    const ext = (p.src.split('?')[0].split('.').pop() || '').toLowerCase();
+    const code = m.error && m.error.code ? ', kod ' + m.error.code : '';
+    const f = document.createElement('div');
+    f.className = 'fail';
+    f.textContent = (p.type === 'video' ? 'Video' : 'Görsel') + ' yüklenemedi (.' + ext + code + ', ' + host + '). ' +
+      (p.type === 'video' ? 'Bu cihaz biçimi desteklemiyor olabilir. ' : 'VPN açık mı? ') + 'Sonrakine geçiliyor…';
+    slide.insertBefore(f, slide.firstChild);
+    if (slide.dataset.a === '1') {
+      setTimeout(() => {
+        if (slide.dataset.a !== '1') return;
+        const top = (Number(slide.dataset.i) + 1) * feed.clientHeight;
+        if (feed.scrollTo) feed.scrollTo({ top: top, behavior: 'smooth' }); else feed.scrollTop = top;
+      }, 1200);
     }
   });
   m.src = p.src;
@@ -442,6 +494,11 @@ function activate(slide) {
   slide.dataset.a = '1';
   S.cur = Number(slide.dataset.i);
   play(slide);
+  if (S.view === 'feed') {
+    const cp = S.posts[S.cur];
+    clearTimeout(seenT);
+    if (cp) seenT = setTimeout(() => markSeen(cp.id), 700);
+  }
   if (S.view === 'feed' && S.cur >= S.posts.length - 6) loadMore();
 }
 
@@ -464,7 +521,10 @@ function clearFeed() {
   feed.innerHTML = '';
   feed.scrollTop = 0;
   S.posts = [];
-  S.seen.clear();
+  S.loaded.clear();
+  S.skipped = 0;
+  S.emptyRuns = 0;
+  clearTimeout(seenT);
   S.cur = -1;
   S.gen++;
   S.loading = false;
@@ -674,6 +734,7 @@ function openSheet() {
   $('#tagInput').value = S.tags ? S.tags + ' ' : '';
   $('#uidInput').value = S.cfg.user;
   $('#keyInput').value = S.cfg.key;
+  updateSeenHint();
   $('#sugg').innerHTML = '';
   renderHist();
   $('#sheet').classList.add('open');
@@ -730,6 +791,27 @@ $('#saveBtn').onclick = () => {
   store.set('cfg', S.cfg);
   closeSheet();
   setTags($('#tagInput').value);
+};
+
+function updateSeenHint() {
+  $('#seenHint').textContent = seenList.length + ' içerik görüldü olarak işaretli; akışta tekrar gösterilmez.';
+}
+let resetArm = 0;
+$('#resetSeen').onclick = () => {
+  const b = $('#resetSeen');
+  if (!resetArm) {
+    b.textContent = 'Emin misin? Tekrar dokun';
+    resetArm = setTimeout(() => { resetArm = 0; b.textContent = 'Görülenleri sıfırla'; }, 3500);
+    return;
+  }
+  clearTimeout(resetArm);
+  resetArm = 0;
+  b.textContent = 'Görülenleri sıfırla';
+  resetSeen();
+  updateSeenHint();
+  closeSheet();
+  toast('Görülenler sıfırlandı');
+  resetFeed();
 };
 
 /* ---------- başlat ---------- */
