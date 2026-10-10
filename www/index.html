@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Feed">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex,nofollow">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>Feed</title>
+<style>
+:root{--pink:#ff2d55}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:#000;color:#fff;font-family:-apple-system,system-ui,"Segoe UI",sans-serif;overflow:hidden;overscroll-behavior:none}
+button{font-family:inherit}
+#feed{position:fixed;inset:0;overflow-y:scroll;scroll-snap-type:y mandatory;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;scrollbar-width:none}
+#feed::-webkit-scrollbar{display:none}
+.slide{position:relative;height:100vh;height:100dvh;scroll-snap-align:start;scroll-snap-stop:always;background:#000;overflow:hidden}
+.media{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.fail{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:30px;color:#aaa;font-size:14px;line-height:1.5}
+.side{position:absolute;right:10px;bottom:calc(84px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:16px;align-items:center;z-index:3}
+.b{background:rgba(0,0,0,.4);border:0;color:#fff;width:50px;height:50px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:21px;text-decoration:none;padding:0;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.b svg{width:28px;height:28px;fill:currentColor}
+.like.on{color:var(--pink)}
+.n{font-size:10px;line-height:1;margin-top:1px}
+.chips{position:absolute;left:0;right:76px;bottom:calc(18px + env(safe-area-inset-bottom));display:flex;gap:6px;overflow-x:auto;padding:0 12px;z-index:3;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;background:rgba(0,0,0,.5);border:0;color:#fff;border-radius:14px;padding:7px 11px;font-size:13px}
+/* video kontrolleri */
+.vc{position:absolute;left:12px;right:76px;bottom:calc(60px + env(safe-area-inset-bottom));z-index:3;display:flex;flex-direction:column;gap:2px}
+.vrow{display:flex;align-items:center;gap:8px}
+.vb{border:0;border-radius:14px;background:rgba(0,0,0,.5);color:#fff;font-size:13px;font-weight:600;padding:7px 11px;min-width:48px}
+.vt{margin-left:auto;font-size:12px;color:#ddd;font-variant-numeric:tabular-nums;text-shadow:0 1px 3px #000}
+.seek{-webkit-appearance:none;appearance:none;width:100%;height:30px;background:transparent;margin:0;touch-action:none}
+.seek::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:rgba(255,255,255,.35)}
+.seek::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#fff;margin-top:-6px}
+.seek::-moz-range-track{height:4px;border-radius:2px;background:rgba(255,255,255,.35)}
+.seek::-moz-range-thumb{width:16px;height:16px;border:0;border-radius:50%;background:#fff}
+/* üst bar */
+.top{position:fixed;left:0;right:0;top:0;padding:calc(8px + env(safe-area-inset-top)) 10px 18px;display:flex;gap:8px;z-index:10;background:linear-gradient(#000b,transparent);pointer-events:none}
+.top>*{pointer-events:auto}
+.tb{flex:1;min-width:0;height:40px;border:0;border-radius:20px;background:rgba(255,255,255,.16);color:#fff;font-size:15px;padding:0 16px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.ib{flex:none;width:40px;height:40px;border:0;border-radius:50%;background:rgba(255,255,255,.16);color:#fff;font-size:18px;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.ib.on{color:var(--pink)}
+/* beğenilenler ızgarası */
+#grid{position:fixed;inset:0;z-index:7;background:#000;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:calc(64px + env(safe-area-inset-top)) 0 calc(20px + env(safe-area-inset-bottom));display:grid;grid-template-columns:repeat(4,1fr);gap:2px;align-content:start}
+#grid[hidden]{display:none}
+.cell{position:relative;aspect-ratio:1/1;background:#1a1a1c;overflow:hidden;border:0;padding:0;color:#fff}
+.cell img{width:100%;height:100%;object-fit:cover;display:block}
+.cell .vi{position:absolute;right:4px;bottom:4px;font-size:11px;background:#000a;border-radius:8px;padding:2px 6px}
+.gempty{grid-column:1/-1;text-align:center;color:#888;padding:60px 30px;line-height:1.5}
+.pop{position:absolute;z-index:4;width:90px;height:90px;margin:-45px 0 0 -45px;color:var(--pink);pointer-events:none;animation:pop .7s ease-out forwards}
+.pop svg{width:100%;height:100%;fill:currentColor;filter:drop-shadow(0 4px 12px #0008)}
+@keyframes pop{0%{transform:scale(.3);opacity:0}25%{transform:scale(1.15);opacity:1}60%{transform:scale(1);opacity:1}100%{transform:scale(1.3) translateY(-30px);opacity:0}}
+#msg{position:fixed;inset:0;z-index:6;display:flex;flex-direction:column;gap:16px;align-items:center;justify-content:center;text-align:center;padding:40px;color:#bbb;font-size:15px;line-height:1.5}
+#msg[hidden]{display:none}
+#msg p{margin:0}
+#msgS{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+#msgS .chip{background:#2a2a2d;font-size:14px}
+#msg button.btn,.btn{border:0;border-radius:22px;background:var(--pink);color:#fff;font-size:16px;font-weight:600;padding:12px 26px}
+#spin{position:fixed;left:50%;bottom:calc(10px + env(safe-area-inset-bottom));width:22px;height:22px;margin-left:-11px;border:3px solid #fff4;border-top-color:#fff;border-radius:50%;animation:sp .8s linear infinite;z-index:9;display:none}
+@keyframes sp{to{transform:rotate(360deg)}}
+#toast{position:fixed;left:50%;top:calc(64px + env(safe-area-inset-top));transform:translateX(-50%);background:#222e;color:#fff;padding:10px 16px;border-radius:14px;font-size:14px;z-index:30;max-width:86%;text-align:center;opacity:0;transition:opacity .25s;pointer-events:none}
+#toast.show{opacity:1}
+/* alt panel */
+#sheet{position:fixed;left:0;right:0;bottom:0;z-index:20;background:#161618;border-radius:20px 20px 0 0;padding:18px 16px calc(20px + env(safe-area-inset-bottom));transform:translateY(105%);transition:transform .28s ease;max-height:88dvh;overflow-y:auto}
+#sheet.open{transform:none}
+#scrim{position:fixed;inset:0;background:#0008;z-index:19;display:none}
+#scrim.open{display:block}
+#sheet h3{margin:14px 0 8px;font-size:13px;color:#999;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+#sheet h3:first-child{margin-top:0}
+input[type=text],input[type=password]{width:100%;height:46px;border:0;border-radius:12px;background:#2a2a2d;color:#fff;font-size:16px;padding:0 14px;margin-bottom:8px;outline:none}
+.row{display:flex;gap:8px}
+.row input{flex:1;min-width:0}
+.row .btn{flex:none;padding:0 20px;height:46px}
+#hist,#quick{display:flex;flex-wrap:wrap;gap:6px}
+#hist .chip,#quick .chip{background:#2a2a2d}
+.hint{font-size:12px;color:#888;line-height:1.5;margin:2px 0 8px}
+/* öneriler */
+#sugg{display:flex;flex-direction:column;margin:0 0 6px}
+.sg{display:flex;align-items:center;gap:10px;border:0;background:transparent;color:#fff;text-align:left;padding:11px 2px;border-bottom:1px solid #2a2a2d;font-size:15px}
+.sg .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sg .ct{color:#888;font-size:13px}
+.cat{flex:none;font-size:11px;font-weight:700;border-radius:8px;padding:3px 7px;color:#fff;background:#555;min-width:58px;text-align:center}
+.cat.artist{background:#aa0000}
+.cat.copyright{background:#a800aa}
+.cat.character{background:#00aa00}
+.cat.meta{background:#d97800}
+.cat.general{background:#337ab7}
+#gate{position:fixed;inset:0;background:#000;z-index:50;display:flex;flex-direction:column;gap:18px;align-items:center;justify-content:center;text-align:center;padding:40px}
+#gate[hidden]{display:none}
+#gate p{color:#aaa;font-size:15px;line-height:1.5;max-width:320px;margin:0}
+</style>
+</head>
+<body>
+<div id="feed"></div>
+<div id="grid" hidden></div>
+
+<div class="top">
+  <button class="tb" id="tagBtn">Etiket ara…</button>
+  <button class="ib" id="likesBtn" aria-label="Beğenilenler">&#9829;&#xFE0E;</button>
+  <button class="ib" id="setBtn" aria-label="Ayarlar">&#9881;&#xFE0E;</button>
+</div>
+
+<div id="msg" hidden><p id="msgT"></p><div id="msgS"></div><button id="msgB" hidden></button></div>
+<div id="spin"></div>
+<div id="toast"></div>
+
+<div id="scrim"></div>
+<div id="sheet">
+  <h3>Etiket ara</h3>
+  <div class="row">
+    <input type="text" id="tagInput" placeholder="yazmaya başla, öneriler çıkar" autocapitalize="none" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="search">
+    <button class="btn" id="applyBtn">Ara</button>
+  </div>
+  <div id="sugg"></div>
+  <div class="hint">Önerilerden birine dokununca doğru etiket adı eklenir. Başına <code>-</code> koyarsan o etiket hariç tutulur.</div>
+  <h3>Hızlı ekle</h3>
+  <div id="quick"></div>
+  <h3>Son aramalar</h3>
+  <div id="hist"></div>
+
+  <h3>API erişimi</h3>
+  <input type="text" id="uidInput" placeholder="user_id" inputmode="numeric" autocomplete="off">
+  <input type="password" id="keyInput" placeholder="api_key" autocomplete="off">
+  <div class="hint">rule34.xxx hesabında Options → API Access Credentials sayfasından alınır. Veriler yalnızca cihazında saklanır. Site Türkiye'de engelli olduğu için VPN açık olmalı.</div>
+  <div class="row"><button class="btn" id="saveBtn" style="flex:1">Kaydet</button></div>
+</div>
+
+<div id="gate" hidden>
+  <p>Bu uygulama yetişkinlere yönelik içerik gösterir. Devam etmek için 18 yaşından büyük olmalısın.</p>
+  <button class="btn" id="gateOk">18 yaşından büyüğüm</button>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
