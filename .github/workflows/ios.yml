@@ -1,0 +1,56 @@
+name: Build iOS IPA (imzasiz)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Bagimliliklari kur
+        run: npm install
+
+      - name: iOS projesini olustur
+        run: npx cap add ios
+
+      - name: Uygulama ikonu
+        run: |
+          ICON=ios/App/App/Assets.xcassets/AppIcon.appiconset
+          if [ -d "$ICON" ]; then cp icon-1024.png "$ICON/AppIcon-512@2x.png"; fi
+
+      - name: Koyu mod (durum cubugu okunur kalsin)
+        run: |
+          P=ios/App/App/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :UIUserInterfaceStyle string Dark" "$P" || /usr/libexec/PlistBuddy -c "Set :UIUserInterfaceStyle Dark" "$P"
+
+      - name: Web dosyalarini esitle
+        run: npx cap sync ios
+
+      - name: Derle (imzasiz arsiv)
+        working-directory: ios/App
+        run: |
+          if [ -d App.xcworkspace ]; then T="-workspace App.xcworkspace"; else T="-project App.xcodeproj"; fi
+          xcodebuild $T -scheme App -configuration Release -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$PWD/build/App.xcarchive" archive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+
+      - name: IPA paketle
+        working-directory: ios/App/build
+        run: |
+          mkdir Payload
+          cp -R App.xcarchive/Products/Applications/App.app Payload/
+          zip -qry Feed.ipa Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Feed-ipa
+          path: ios/App/build/Feed.ipa
