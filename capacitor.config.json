@@ -1,0 +1,13 @@
+{
+  "appId": "com.alper.feed",
+  "appName": "Feed",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#000000"
+  },
+  "plugins": {
+    "CapacitorHttp": { "enabled": true },
+    "StatusBar": { "style": "DARK" }
+  }
+}

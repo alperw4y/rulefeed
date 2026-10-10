@@ -1,0 +1,14 @@
+{
+  "name": "feed-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Dikey kaydırmalı medya akışı (Capacitor iOS)",
+  "dependencies": {
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/ios": "^7.0.0",
+    "@capacitor/status-bar": "^7.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.0.0"
+  }
+}
